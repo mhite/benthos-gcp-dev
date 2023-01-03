@@ -1,0 +1,3 @@
+config:
+  benthos-gcp-dev:benthos_service_account: benthos@benthos-dev-12345.iam.gserviceaccount.com
+  gcp:project: benthos-dev-12345

@@ -1,0 +1,3 @@
+name: benthos-gcp-dev
+runtime: go
+description: benthos gcp infrastructure
