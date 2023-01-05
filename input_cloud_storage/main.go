@@ -24,7 +24,8 @@ func main() {
 			return err
 		}
 		subscriptionArgs := pubsub.SubscriptionArgs{
-			Topic: topic.Name,
+			Topic:              topic.Name,
+			AckDeadlineSeconds: pulumi.Int(60),
 		}
 		subscription, err := pubsub.NewSubscription(ctx, "bucket-notification-sub", &subscriptionArgs)
 		if err != nil {
@@ -61,6 +62,7 @@ func main() {
 		// Notification
 		notificationArgs := storage.NotificationArgs{
 			Bucket:        bucket.Name,
+			EventTypes:    pulumi.StringArray{pulumi.String("OBJECT_FINALIZE")},
 			PayloadFormat: pulumi.String("JSON_API_V1"),
 			Topic:         topic.Name, // //pubsub.googleapis.com/projects/{project-identifier}/topics/{my-topic}
 		}
