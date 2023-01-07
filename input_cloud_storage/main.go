@@ -63,7 +63,7 @@ func main() {
 		notificationArgs := storage.NotificationArgs{
 			Bucket:        bucket.Name,
 			EventTypes:    pulumi.StringArray{pulumi.String("OBJECT_FINALIZE")},
-			PayloadFormat: pulumi.String("JSON_API_V1"),
+			PayloadFormat: pulumi.String("NONE"),
 			Topic:         topic.Name, // //pubsub.googleapis.com/projects/{project-identifier}/topics/{my-topic}
 		}
 		_, err = storage.NewNotification(ctx, "bucket-notification", &notificationArgs, pulumi.DependsOn([]pulumi.Resource{topicIam}))
