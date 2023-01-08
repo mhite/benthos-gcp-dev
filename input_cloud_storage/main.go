@@ -1,7 +1,10 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/pulumi/pulumi-gcp/sdk/v6/go/gcp/logging"
+	"github.com/pulumi/pulumi-gcp/sdk/v6/go/gcp/organizations"
 	"github.com/pulumi/pulumi-gcp/sdk/v6/go/gcp/pubsub"
 	"github.com/pulumi/pulumi-gcp/sdk/v6/go/gcp/storage"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
@@ -10,11 +13,45 @@ import (
 
 func main() {
 	pulumi.Run(func(ctx *pulumi.Context) error {
-
 		// Handle config
 		conf := config.New(ctx, "")
 		benthosServiceAccountEmail := conf.Get("benthos_service_account")
-
+		// Figure out project number
+		projectInfo, err := organizations.LookupProject(ctx, nil)
+		if err != nil {
+			return err
+		}
+		projectNumber := projectInfo.Number
+		// Email account for project Pub/Sub service account
+		pubsubProjectServiceAccountEmail := fmt.Sprintf("service-%s@gcp-sa-pubsub.iam.gserviceaccount.com", projectNumber)
+		// Create dead letter topic
+		deadLetterTopicArgs := pubsub.TopicArgs{
+			Name: pulumi.String("bucket-notification-dl-topic"),
+		}
+		deadLetterTopic, err := pubsub.NewTopic(ctx, "bucket-notification-dl-topic", &deadLetterTopicArgs)
+		if err != nil {
+			return err
+		}
+		pubsubServiceAccount := pulumi.Sprintf("serviceAccount:%s", pubsubProjectServiceAccountEmail)
+		// Grant Pub/Sub service account publish role on dead letter topic
+		deadLetterTopicIamMemberArgs := pubsub.TopicIAMMemberArgs{
+			Member: pubsubServiceAccount,
+			Role:   pulumi.String("roles/pubsub.publisher"),
+			Topic:  deadLetterTopic.Name,
+		}
+		_, err = pubsub.NewTopicIAMMember(ctx, "notification-dl-topic-iam", &deadLetterTopicIamMemberArgs)
+		if err != nil {
+			return err
+		}
+		// Create dead letter subscription
+		deadLetterSubscriptionArgs := pubsub.SubscriptionArgs{
+			Topic:              deadLetterTopic.Name,
+			AckDeadlineSeconds: pulumi.Int(60),
+		}
+		_, err = pubsub.NewSubscription(ctx, "bucket-notification-dl-sub", &deadLetterSubscriptionArgs)
+		if err != nil {
+			return err
+		}
 		// Create Pub/Sub topic for bucket event notifications
 		topicArgs := pubsub.TopicArgs{
 			Name: pulumi.String("bucket-notification-topic"),
@@ -23,14 +60,32 @@ func main() {
 		if err != nil {
 			return err
 		}
+		// Create Pub/Sub subscription for bucket event notifications
+		deadLetterPolicyArgs := pubsub.SubscriptionDeadLetterPolicyArgs{
+			DeadLetterTopic:     deadLetterTopic.ID(),
+			MaxDeliveryAttempts: pulumi.Int(5),
+		}
 		subscriptionArgs := pubsub.SubscriptionArgs{
 			Topic:              topic.Name,
 			AckDeadlineSeconds: pulumi.Int(60),
+			DeadLetterPolicy:   &deadLetterPolicyArgs,
 		}
 		subscription, err := pubsub.NewSubscription(ctx, "bucket-notification-sub", &subscriptionArgs)
 		if err != nil {
 			return err
 		}
+
+		// Grant Pub/Sub service account subscriber role on subscription
+		deadLetterSubscriptionIamMemberArgs := pubsub.SubscriptionIAMMemberArgs{
+			Member:       pubsubServiceAccount,
+			Role:         pulumi.String("roles/pubsub.subscriber"),
+			Subscription: subscription.Name,
+		}
+		_, err = pubsub.NewSubscriptionIAMMember(ctx, "pubsub-notification-subscription-iam", &deadLetterSubscriptionIamMemberArgs)
+		if err != nil {
+			return err
+		}
+
 		// Figure out Cloud Storage service account for project
 		gcsAccount, err := storage.GetProjectServiceAccount(ctx, nil)
 		if err != nil {
@@ -63,7 +118,7 @@ func main() {
 		notificationArgs := storage.NotificationArgs{
 			Bucket:        bucket.Name,
 			EventTypes:    pulumi.StringArray{pulumi.String("OBJECT_FINALIZE")},
-			PayloadFormat: pulumi.String("NONE"),
+			PayloadFormat: pulumi.String("JSON_API_V1"),
 			Topic:         topic.Name, // //pubsub.googleapis.com/projects/{project-identifier}/topics/{my-topic}
 		}
 		_, err = storage.NewNotification(ctx, "bucket-notification", &notificationArgs, pulumi.DependsOn([]pulumi.Resource{topicIam}))
@@ -114,7 +169,7 @@ func main() {
 				Role:         pulumi.String("roles/pubsub.subscriber"),
 				Subscription: subscription.Name,
 			}
-			_, err := pubsub.NewSubscriptionIAMMember(ctx, "notification-subscription-iam", &subscriptionIamMemberArgs)
+			_, err := pubsub.NewSubscriptionIAMMember(ctx, "benthos-notification-subscription-iam", &subscriptionIamMemberArgs)
 			if err != nil {
 				return err
 			}
