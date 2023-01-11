@@ -164,12 +164,12 @@ func main() {
 				return err
 			}
 			// grant IAM to subscription
-			subscriptionIamMemberArgs := pubsub.SubscriptionIAMMemberArgs{
+			benthosSubscriptionIamMemberArgs := pubsub.SubscriptionIAMMemberArgs{
 				Member:       benthosServiceAccount,
 				Role:         pulumi.String("roles/pubsub.subscriber"),
 				Subscription: subscription.Name,
 			}
-			_, err := pubsub.NewSubscriptionIAMMember(ctx, "benthos-notification-subscription-iam", &subscriptionIamMemberArgs)
+			_, err := pubsub.NewSubscriptionIAMMember(ctx, "benthos-notification-subscription-iam", &benthosSubscriptionIamMemberArgs)
 			if err != nil {
 				return err
 			}
