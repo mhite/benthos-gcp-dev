@@ -1,6 +1,10 @@
 # input_cloud_storage
 
-The Pulumi contained in this folder sets up the following cloud infrastructure components:
+The following diagram illustrates how `input_cloud_storage` integrates with a [bucket notification](https://cloud.google.com/storage/docs/pubsub-notifications) subscription.
+
+![behavior diagram](behavior.png)
+
+To support this architecture, the Pulumi contained in this folder sets up the following cloud infrastructure components:
 
 * Pub/Sub topic for dead letters
 * Pub/Sub subscription for dead letters
